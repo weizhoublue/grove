@@ -53,9 +53,10 @@ func TestSetInitializedCondition(t *testing.T) {
 }
 
 // TestBuildResource verifies that buildResource correctly populates PodGang
-// labels and annotations. PCS owns the non-grove.io key namespace exclusively
-// (additions and removals on the PCS propagate); grove.io/-prefixed keys are
-// operator-managed and persist independent of PCS state.
+// labels and annotations. PCS non-grove.io metadata is mirrored onto the
+// PodGang, while existing PodGang metadata from external writers is preserved.
+// grove.io/-prefixed keys from the PCS are ignored because that namespace is
+// operator-managed.
 func TestBuildResource(t *testing.T) {
 	const pcsName = "test-pcs"
 	expectedDefaultLabels := getLabels(pcsName)
@@ -110,25 +111,26 @@ func TestBuildResource(t *testing.T) {
 			expectedAnnotations: map[string]string{},
 		},
 		{
-			name: "mirror path: drops stale non-grove.io annotation that PCS no longer carries",
+			name: "mirror path: preserves existing external non-grove.io annotation",
 			pcsAnnotations: map[string]string{
 				"nvidia.com/kai-scheduler-queue": "worker-queue",
 			},
 			initialPodGangAnnotations: map[string]string{
 				"nvidia.com/kai-scheduler-queue": "worker-queue",
-				"nvidia.com/stale-key":           "stale-value",
+				"nvidia.com/external-key":        "external-value",
 			},
 			expectedLabels: expectedDefaultLabels,
 			expectedAnnotations: map[string]string{
 				"nvidia.com/kai-scheduler-queue": "worker-queue",
+				"nvidia.com/external-key":        "external-value",
 			},
 		},
 		{
-			name:                 "mirror path: drops stale non-grove.io label that PCS no longer carries",
+			name:                 "mirror path: preserves existing external non-grove.io label",
 			pcsLabels:            map[string]string{"team": "platform"},
-			initialPodGangLabels: map[string]string{"team": "platform", "stale.label/key": "stale-value"},
+			initialPodGangLabels: map[string]string{"team": "platform", "external.label/key": "external-value"},
 			expectedLabels: lo.Assign(
-				map[string]string{"team": "platform"},
+				map[string]string{"team": "platform", "external.label/key": "external-value"},
 				expectedDefaultLabels,
 			),
 			expectedAnnotations: map[string]string{},

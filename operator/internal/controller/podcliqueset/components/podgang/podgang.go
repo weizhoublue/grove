@@ -127,11 +127,9 @@ func (r _resource) Delete(ctx context.Context, logger logr.Logger, pcsObjectMeta
 
 // buildResource configures a PodGang with pod groups and priority.
 func (r _resource) buildResource(pcs *grovecorev1alpha1.PodCliqueSet, pgi *podGangInfo, pg *groveschedulerv1alpha1.PodGang) error {
-	// Mirror PCS labels and annotations onto the PodGang so the PCS owns the
-	// non-grove.io namespace exclusively — additions and removals on the PCS
-	// propagate. grove.io/-prefixed entries are operator-managed and have a
-	// lifecycle independent of the PCS, so they are preserved across reconciles
-	// and (for PCS keys with that prefix) skipped on mirror.
+	// Mirror PCS labels and annotations onto the PodGang while preserving
+	// existing entries from external writers. grove.io/-prefixed PCS entries are
+	// ignored because that namespace is operator-managed.
 	pg.Labels = mirrorPCSMetadata(pg.Labels, pcs.Labels, getLabels(pcs.Name))
 	// Set scheduler name so the podgang controller can resolve the correct backend.
 	// When no scheduler can be resolved, drop any stale label from a previous reconcile.
@@ -218,17 +216,14 @@ func getLabels(pcsName string) map[string]string {
 }
 
 // mirrorPCSMetadata returns the result of mirroring PCS-owned labels or annotations
-// onto the PodGang. grove.io/-prefixed entries on the PodGang (operator-managed) are
-// preserved; grove.io/-prefixed entries on the PCS are ignored. Operator-computed
-// entries passed via operatorManaged are layered on top and always win.
+// onto the PodGang. Existing PodGang entries are preserved; grove.io/-prefixed
+// entries on the PCS are ignored. Operator-computed entries passed via
+// operatorManaged are layered on top and always win.
 func mirrorPCSMetadata(existingPodGangEntries, pcsEntries, operatorManaged map[string]string) map[string]string {
-	preservedGrove := lo.PickBy(existingPodGangEntries, func(k, _ string) bool {
-		return strings.HasPrefix(k, apicommonconstants.GroveDomainPrefix)
-	})
 	mirroredFromPCS := lo.OmitBy(pcsEntries, func(k, _ string) bool {
 		return strings.HasPrefix(k, apicommonconstants.GroveDomainPrefix)
 	})
-	return lo.Assign(preservedGrove, mirroredFromPCS, operatorManaged)
+	return lo.Assign(map[string]string{}, existingPodGangEntries, mirroredFromPCS, operatorManaged)
 }
 
 func podGangHasTranslatedTopologyConstraints(pgi *podGangInfo) bool {
